@@ -1,4 +1,4 @@
-# This repository contains the data-processing and modeling workflow for the manuscript:
+# This repository contains the data-processing, modeling, experiments, and benchmarking workflow for manuscript:
 
 **Electrochemical reversibility revealed by bipolar perturbations for chemistry-inclusive retired lithium-ion battery diagnostics**
 
