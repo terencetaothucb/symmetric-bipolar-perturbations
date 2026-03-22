@@ -1,3 +1,7 @@
+"""
+Shared constants and sheet-matching rules for the data-processing pipeline.
+"""
+
 from __future__ import annotations
 
 import re

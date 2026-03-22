@@ -1,3 +1,7 @@
+"""
+Step 3: regroup Step2 cell-level outputs into one workbook per pulse width.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -26,10 +30,13 @@ HEADER_ITEMS = (
 
 
 def aggregate_one_type_folder(type_folder: Path, output_root: Path, soc_values: List[int], pt_values: List[float], overwrite: bool) -> None:
+    """Build Step3 pulse-width workbooks for one material folder."""
     output_folder = output_root / type_folder.name
     ensure_dir(output_folder)
 
     pt_values_ms = [int(round(value * 1000)) for value in pt_values]
+    # Bucket 0 stores the merged "SOC ALL" rows, while buckets 1..N store
+    # the individual SOC sheets in the order of soc_values.
     per_pt_data: Dict[int, List[List[list]]] = {
         value_ms: [[] for _ in range(len(soc_values) + 1)] for value_ms in pt_values_ms
     }

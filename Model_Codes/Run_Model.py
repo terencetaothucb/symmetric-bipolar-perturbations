@@ -3,10 +3,10 @@
 Experiment_AllMaterials_SOC405070_W5000_FaiIrrevOnly_byCRate.py
 
 Purpose:
-- Run the fai_irrev-only experiment on all material folders under Step4 output.
-- width_ms=5000
-- soc in {40, 50, 70}
-- each run keeps only one C-rate via keep_regex.
+- Run the fai_irrev-only experiment on all material folders under the Step4 output root.
+- Use width_ms=5000.
+- Use soc in {40, 50, 70}.
+- Keep only one C-rate per run via keep_regex.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def crate_to_keep_regex(crate_str: str) -> str:
 
     Examples:
       "0.5C" -> r"_0\.5C$"
-      "1C"   -> r"_1C$"
+      "1C" -> r"_1C$"
       "2.5C" -> r"_2\.5C$"
     """
     crate_str = crate_str.strip()
@@ -42,7 +42,7 @@ def crate_to_keep_regex(crate_str: str) -> str:
     return rf"_{core}C$"
 
 
-def main():
+def main() -> None:
     # -----------------------------
     # Fixed experimental settings
     # -----------------------------
@@ -61,15 +61,15 @@ def main():
 
     feature_combo = "fai_irrev_Only"
 
-    # ✅ Each run selects ONLY ONE C-rate
-    # You can reduce this list to run fewer cases, e.g. only ["1C"].
+    # Each run keeps only one C-rate from the selected feature family.
+    # Reduce this list to run fewer cases, for example only ["1C"].
     crate_list = ["0.5C", "1C", "1.5C", "2C", "2.5C"]
 
     # -----------------------------
-    # Global knobs (adjust if needed)
+    # Global knobs
     # -----------------------------
     MODELS = ["linear", "ridge", "lasso", "en", "svm", "rf", "xgb", "gpr", "mlp", "transformer", "informer"]
-    SEEDS = list(range(100))     # quick check: list(range(5))
+    SEEDS = list(range(100))  # For quick checks, reduce this list, for example list(range(5)).
     TEST_SIZE = 0.2
     SHOW_PROGRESS = True
 

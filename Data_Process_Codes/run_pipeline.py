@@ -1,3 +1,7 @@
+"""
+Run the main PulseBat processing pipeline from Step1 through Step4.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -30,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """Parse CLI arguments and run the four processing steps in sequence."""
     args = build_parser().parse_args()
 
     raw_root = Path(args.raw_root)

@@ -1,3 +1,7 @@
+"""
+Step 1: extract the workstep sheet from each raw workbook.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -11,6 +15,7 @@ from utils import ensure_dir, filter_type_folders, is_first_part_file, list_exce
 
 
 def resolve_sheet_name(excel_path: Path, preferred_name: str | None, preferred_index: int | None) -> str | int:
+    """Resolve the workstep sheet by preferred name, known aliases, or fallback index."""
     workbook = pd.ExcelFile(excel_path, engine="openpyxl")
 
     if preferred_name and preferred_name in workbook.sheet_names:
@@ -27,6 +32,7 @@ def resolve_sheet_name(excel_path: Path, preferred_name: str | None, preferred_i
 
 
 def process_type_folder(type_folder: Path, output_root: Path, sheet_name: str | None, sheet_index: int | None) -> None:
+    """Extract the workstep sheet for every first-part file in one material folder."""
     output_folder = output_root / type_folder.name
     ensure_dir(output_folder)
 

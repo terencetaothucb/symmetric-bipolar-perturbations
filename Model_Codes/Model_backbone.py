@@ -40,7 +40,7 @@ from sklearn.svm import SVR
 
 
 # ============================================================
-# 0) Optional Torch (for Transformer / Informer)
+# 0) Torch-backed models
 # ============================================================
 
 _TORCH_AVAILABLE = False
@@ -187,21 +187,21 @@ CONFIG: Dict[str, Any] = dict(
     test_size=0.2,
     seeds=list(range(100)),
 
-    # models: keep your set + add svm/en + add transformer/informer (torch optional)
+    # Models to benchmark in each run.
     models=["linear", "ridge", "lasso", "en", "svm", "rf", "xgb", "gpr", "mlp", "transformer", "informer"],
 
     standardize=True,
     perm_repeats=10,
     topk_featimp=50,
 
-    # deep model training (torch models)
+    # Torch model training hyperparameters.
     torch_device="auto",        # "auto" | "cpu" | "cuda"
     torch_epochs=200,
     torch_batch_size=64,
     torch_lr=1e-3,
     torch_weight_decay=1e-6,
     torch_patience=30,
-    torch_seed_offset=12345,    # to make torch init depend on seed deterministically
+    torch_seed_offset=12345,    # Makes torch initialization depend on the run seed deterministically.
 
     out_dir=r"E:\Datasets\PulseBat_all\Data\Model_Output",
     show_progress=True,
@@ -494,7 +494,7 @@ def _resolve_torch_device(cfg: Dict[str, Any]) -> str:
         return "cpu"
     if mode == "cuda":
         return "cuda" if (_TORCH_AVAILABLE and torch.cuda.is_available()) else "cpu"
-    # auto
+    # Auto-select CUDA when available.
     return "cuda" if (_TORCH_AVAILABLE and torch.cuda.is_available()) else "cpu"
 
 class _TabTransformerNet(nn.Module):
@@ -589,7 +589,7 @@ class TorchRegressor:
         X = np.asarray(X, dtype=np.float32)
         y = np.asarray(y, dtype=np.float32).reshape(-1)
 
-        # train/val split inside train set (fixed by seed)
+        # Split the training fold again to create an internal validation set.
         n = len(y)
         idx = np.arange(n)
         rng = np.random.RandomState(self.seed)
@@ -626,7 +626,7 @@ class TorchRegressor:
                 loss.backward()
                 opt.step()
 
-            # val
+            # Validation pass.
             self.net.eval()
             with torch.no_grad():
                 vals = []
@@ -676,7 +676,7 @@ class TorchRegressor:
 def build_model(name: str, random_state: int, n_features: int, cfg: Dict[str, Any]):
     name = name.lower().strip()
 
-    # classic
+    # Classical regression models
     if name == "linear":
         return LinearRegression()
     if name == "ridge":
@@ -688,11 +688,11 @@ def build_model(name: str, random_state: int, n_features: int, cfg: Dict[str, An
     if name in ["svm", "svr"]:
         return SVR(kernel="rbf", C=10.0, gamma="scale", epsilon=0.01)
 
-    # tree/boost
+    # Tree-based and boosted models
     if name == "rf":
         return RandomForestRegressor(n_estimators=600, random_state=random_state, n_jobs=-1, min_samples_leaf=1)
 
-    # gpr/mlp
+    # Kernel and neural-network baselines
     if name == "gpr":
         kernel = ConstantKernel(1.0, (1e-2, 1e2)) * RBF(1.0, (1e-2, 1e2)) + WhiteKernel(noise_level=1e-5)
         return GaussianProcessRegressor(kernel=kernel, normalize_y=True, random_state=random_state)
@@ -712,7 +712,7 @@ def build_model(name: str, random_state: int, n_features: int, cfg: Dict[str, An
             validation_fraction=0.15,
         )
 
-    # xgboost
+    # XGBoost
     if name == "xgb":
         try:
             import xgboost as xgb  # noqa
@@ -730,7 +730,7 @@ def build_model(name: str, random_state: int, n_features: int, cfg: Dict[str, An
             objective="reg:squarederror",
         )
 
-    # deep (torch optional)
+    # Torch-backed models
     if name == "transformer":
         if not _TORCH_AVAILABLE:
             raise ImportError("torch not installed; cannot run transformer.")
@@ -796,7 +796,7 @@ def run(cfg: Dict[str, Any]) -> Path:
     run_tag = f"{_now_ts()}__{_safe_name(material)}__W{width_ms}__SOC{soc}__{feat_tag}"
     run_dir, summary_dir, raw_dir = resolve_run_dirs(cfg, run_tag)
 
-    # save config snapshot
+    # Save a snapshot of the resolved configuration for reproducibility.
     cfg_dump = dict(cfg)
     cfg_dump["project_root_resolved"] = str(project_root)
     cfg_dump["data_root_resolved"] = str(data_root)
@@ -804,7 +804,7 @@ def run(cfg: Dict[str, Any]) -> Path:
     cfg_dump["feature_spec_resolved"] = feat_spec_resolved
     (summary_dir / "config.json").write_text(json.dumps(cfg_dump, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    # load data
+    # Load the selected Step4 workbook, SOC sheet, and feature columns.
     Xdf, yser, feature_cols, sheet_name, label_col = load_xy(
         xlsx_path=xlsx_path,
         soc=soc,
@@ -852,7 +852,7 @@ def run(cfg: Dict[str, Any]) -> Path:
     done = 0
 
     for model_name in models:
-        # dependency check
+        # Validate model dependencies before entering the seed loop.
         try:
             _ = build_model(model_name, random_state=0, n_features=X.shape[1], cfg=cfg)
         except Exception as e:
@@ -872,19 +872,14 @@ def run(cfg: Dict[str, Any]) -> Path:
 
             base = build_model(model_name, random_state=seed, n_features=X.shape[1], cfg=cfg)
 
-            # Standardize where it makes sense:
-            # - linear/ridge/lasso/en/svm/gpr/mlp benefit from scaling
-            # - rf/xgb: no scaling
-            # - torch models: we keep scaling ON by default (stabilizes training)
+            # Standardize the feature matrix for models that benefit from scaling.
             need_scaler = standardize and (model_name in ["linear", "ridge", "lasso", "en", "elasticnet", "svm", "svr", "gpr", "mlp", "transformer", "informer"])
             if need_scaler and (model_name not in ["rf", "xgb"]):
                 model = Pipeline([("scaler", StandardScaler()), ("est", base)])
             else:
                 model = base
 
-            # -----------------
-            # Timing: fit + predict(test)
-            # -----------------
+            # Measure training time and test-set inference time for each run.
             t0 = time.perf_counter()
             model.fit(X_train, y_train)
             t1 = time.perf_counter()
@@ -901,7 +896,7 @@ def run(cfg: Dict[str, Any]) -> Path:
             fit_ms_per_train_sample = fit_time_s / max(len(y_train), 1) * 1000.0
             pred_us_per_test_sample = pred_time_test_s / max(len(y_test), 1) * 1e6
 
-            # metrics
+            # Record train/test accuracy and efficiency metrics.
             mrow = dict(
                 feature_tag=feat_tag,
                 feature_name=feat_spec_resolved.get("name", ""),
@@ -925,7 +920,7 @@ def run(cfg: Dict[str, Any]) -> Path:
             )
             metrics_rows.append(mrow)
 
-            # predictions with error columns (store raw per seed, and later summary aggregate)
+            # Save raw predictions with per-sample error columns.
             def _pred_df(split: str, y_true: np.ndarray, y_pred: np.ndarray) -> pd.DataFrame:
                 y_true = np.asarray(y_true).reshape(-1)
                 y_pred = np.asarray(y_pred).reshape(-1)
@@ -953,11 +948,11 @@ def run(cfg: Dict[str, Any]) -> Path:
             df_seed_pred.to_csv(raw_pred_dir / f"predictions__{model_name}__seed{seed}.csv", index=False)
             pred_rows.append(df_seed_pred)
 
-            # feature importance
+            # Prefer native feature importance when the estimator exposes it,
+            # otherwise fall back to permutation importance.
             core = model.named_steps["est"] if hasattr(model, "named_steps") else model
             fi = native_importance(core, model_name, feature_cols)
             if fi is None:
-                # for svm/gpr/mlp/torch etc -> permutation
                 fi = permutation_importance_df(model, X_test, y_test, feature_cols, perm_repeats, seed)
 
             fi["feature_tag"] = feat_tag
@@ -980,7 +975,7 @@ def run(cfg: Dict[str, Any]) -> Path:
                 show_progress
             )
 
-        # per-model importance summary across seeds -> summary/
+        # Aggregate feature importance across seeds for each model.
         if featimp_by_seed:
             fis = summarize_featimp(featimp_by_seed, topk=topk_featimp)
             fis.insert(0, "feature_tag", feat_tag)

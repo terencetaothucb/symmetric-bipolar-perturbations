@@ -1,3 +1,7 @@
+"""
+Step 4: compute the selected modeling features from Step3 aggregated workbooks.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -20,6 +24,8 @@ from utils import (
 
 
 C_RATES_ABS = [0.5, 1.0, 1.5, 2.0, 2.5]
+# Each C-rate and polarity maps to four Step3 voltage checkpoints:
+# pre-pulse, step response, end-of-pulse, and relaxation voltage.
 U_STARTS = {
     (0.5, +1): 1,
     (0.5, -1): 5,
@@ -42,6 +48,7 @@ NEXT_PRE_AFTER_NEG = {
 
 
 def make_u_mapping() -> Dict[tuple, Dict[str, str]]:
+    """Map each C-rate and polarity to the corresponding Step3 voltage columns."""
     mapping: Dict[tuple, Dict[str, str]] = {}
     for c_rate in C_RATES_ABS:
         for sign in (+1, -1):
@@ -60,6 +67,7 @@ FEATURE_PREFIXES_TO_DROP = ("Hyst_M3_", "fai_irrev_", "Reff_", "E_loss_", "Eloss
 
 
 def compute_selected_features(data_frame: pd.DataFrame, pulse_width_seconds: float) -> pd.DataFrame:
+    """Append fai_irrev, Reff, and E_loss columns to one Step3 sheet."""
     data_frame = data_frame.copy()
     data_frame.columns = normalize_columns(data_frame.columns)
     for u_index in range(1, 42):
@@ -84,6 +92,8 @@ def compute_selected_features(data_frame: pd.DataFrame, pulse_width_seconds: flo
         data_frame[fai_irrev_name] = fai_irrev
         appended_columns.append(fai_irrev_name)
 
+        # Reff is computed from the end-minus-pre pulse voltage divided by the
+        # absolute current. E_loss uses the corresponding Joule-loss proxy.
         current_amperes = c_rate * qn
         for sign in (+1, -1):
             polarity = "p" if sign > 0 else "n"
@@ -108,6 +118,7 @@ def compute_selected_features(data_frame: pd.DataFrame, pulse_width_seconds: flo
 
 
 def process_workbook(input_file: Path, output_file: Path) -> None:
+    """Process one Step3 workbook and preserve non-target sheets unchanged."""
     metadata = parse_step3_file_metadata(input_file.name)
     pulse_width_seconds = metadata["pulse_width_ms"] / 1000.0
     workbook = pd.ExcelFile(input_file, engine="openpyxl")
@@ -123,6 +134,7 @@ def process_workbook(input_file: Path, output_file: Path) -> None:
 
 
 def process_type_folder(type_folder: Path, output_root: Path, overwrite: bool) -> None:
+    """Generate Step4 workbooks for one material folder."""
     output_folder = output_root / type_folder.name
     ensure_dir(output_folder)
     input_files = list_excel_files(type_folder)

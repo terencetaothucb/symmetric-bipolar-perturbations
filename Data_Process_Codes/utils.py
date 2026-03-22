@@ -1,3 +1,7 @@
+"""
+Shared helper functions for directory handling, filename parsing, and sheet matching.
+"""
+
 from __future__ import annotations
 
 import re
@@ -8,6 +12,7 @@ from config import RELEVANT_SHEET_NAME_REGEXES
 
 
 def ensure_dir(path: Path) -> None:
+    """Create a directory and all missing parents if needed."""
     path.mkdir(parents=True, exist_ok=True)
 
 
@@ -36,6 +41,7 @@ def filter_type_folders(type_folders: Iterable[Path], selected_names: Sequence[s
 
 
 def list_excel_files(folder: Path) -> List[Path]:
+    """List regular .xlsx files while skipping temporary artifacts."""
     temp_markers = (".__notefix__.", ".__translate__.", ".__tmp__")
     return sorted(
         [
@@ -74,6 +80,7 @@ def infer_output_prefix_from_type_folder(type_folder_name: str) -> str:
 
 
 def parse_step_source_metadata(file_name: str) -> dict:
+    """Parse the metadata tokens encoded in a Step1/Step2 source filename."""
     tokens = file_name.split("_")
     if len(tokens) < 11:
         raise ValueError(f"Unexpected source filename format: {file_name}")
@@ -89,6 +96,7 @@ def parse_step_source_metadata(file_name: str) -> dict:
 
 
 def parse_step3_file_metadata(file_name: str) -> dict:
+    """Parse chemistry, capacity, and pulse width from a Step3 workbook name."""
     match = re.match(r"^(?P<chem>[A-Za-z0-9]+)_(?P<cap>\d+(?:\.\d+)?)Ah_W_(?P<w>\d+)\.xlsx$", file_name)
     if not match:
         raise ValueError(f"Unexpected Step3 filename format: {file_name}")

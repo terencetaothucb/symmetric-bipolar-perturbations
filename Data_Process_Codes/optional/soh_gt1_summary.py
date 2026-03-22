@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -11,7 +10,9 @@ import numpy as np
 import pandas as pd
 
 
-PREFERRED_SHEETS = ["Sheet1", "工作表1", "工步层", "工作步层", "宸ユ灞?"]
+# Try the most common extracted-sheet names first, then fall back to the first
+# sheet if none of them are present.
+PREFERRED_SHEETS = ["Sheet1", "工作表1", "工步层", "工作步层", "Workstep_Layer"]
 
 
 def ensure_dir(path: Path) -> None:

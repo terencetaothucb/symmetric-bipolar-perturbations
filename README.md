@@ -425,5 +425,3 @@ and writes outputs to:
 If you use this repository, please cite the associated manuscript:
 
 Tao, S., Xia, C., Liang, C., Lu, M., Zhang, X., and Zou, C. *Electrochemical reversibility revealed by bipolar perturbations for lithium-ion battery diagnostics*. Manuscript in preparation.
-
-Citation details can be updated here after formal publication.

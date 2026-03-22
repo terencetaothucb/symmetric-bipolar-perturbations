@@ -1,3 +1,7 @@
+"""
+Step 2: extract pulse-response records and U1-U41 features from Step1 files.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -22,6 +26,8 @@ from utils import (
 RAW_PT_ORDER = list(DEFAULT_PT_VALUES)
 PULSE_GROUP_COUNT = 5
 STEPS_PER_PULSE_GROUP = 4
+# Each SOC block in the Step1 workstep sheet contains all pulse-width groups
+# plus two separator rows used by the original acquisition layout.
 SOC_BLOCK_SIZE = len(RAW_PT_ORDER) * PULSE_GROUP_COUNT * STEPS_PER_PULSE_GROUP + 2
 HEADER_ITEMS = (
     ["File_Name", "Mat", "No.", "ID", "Qn", "Q", "SOH", "Pt", "SOC", "SOCR"]
@@ -30,6 +36,7 @@ HEADER_ITEMS = (
 
 
 def build_record_template(meta: dict, raw_values) -> List[object]:
+    """Create the shared metadata portion of one Step2 output row."""
     record = [None] * len(HEADER_ITEMS)
     q = -float(raw_values[3][16])
     record[0] = meta["file_name"]
@@ -43,11 +50,14 @@ def build_record_template(meta: dict, raw_values) -> List[object]:
 
 
 def extract_soc_row_number_by_index(soc_index: int, pt_value: float) -> int:
+    """Map one SOC index and pulse width to the anchor row in the Step1 sheet."""
     pt_index = RAW_PT_ORDER.index(float(pt_value))
     return 4 + SOC_BLOCK_SIZE * soc_index + 2 + STEPS_PER_PULSE_GROUP * PULSE_GROUP_COUNT * pt_index
 
 
 def write_u_features(record: List[object], raw_values, row_shift: int = 0) -> None:
+    # The Step1 sheet stores alternating voltage columns around each pulse event.
+    # U1 takes the first voltage point, then even/odd indexes switch columns.
     for u_num in DEFAULT_U_INDEXES:
         u_index = DEFAULT_U_INDEXES.index(u_num) + 1
         row_num = record[-1] + (u_num // 2) + row_shift
@@ -65,14 +75,17 @@ def write_u_features(record: List[object], raw_values, row_shift: int = 0) -> No
 
 
 def extract_records_for_file(input_file: Path, soc_values: List[int], pt_values: List[float], row_shift: int) -> List[List[object]]:
+    """Extract all valid Step2 rows from one Step1 workbook."""
     raw_values = pd.read_excel(input_file, engine="openpyxl").values
     meta = parse_step_source_metadata(input_file.name)
     base_record = build_record_template(meta, raw_values)
     data: List[List[object]] = []
 
     if is_train_file_by_name(input_file.name):
+        # Training files contain the full SOC ladder in one workbook.
         soc_iterable = [(float(soc_value), int(round(float(soc_value) / 5.0 - 1))) for soc_value in soc_values]
     else:
+        # Non-training files encode a single SOC directly in the filename.
         soc_iterable = [(float(meta["soc_token"]), 0)]
 
     for soc_value, soc_index in soc_iterable:
@@ -93,6 +106,7 @@ def extract_records_for_file(input_file: Path, soc_values: List[int], pt_values:
 
 
 def process_type_folder(type_folder: Path, output_root: Path, soc_values: List[int], pt_values: List[float], row_shift: int) -> None:
+    """Generate one Step2 workbook per Step1 workbook for a given material folder."""
     output_folder = output_root / type_folder.name
     ensure_dir(output_folder)
     input_files = list_excel_files(type_folder)
