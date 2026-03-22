@@ -1,8 +1,8 @@
 # This repository contains the data-processing, modeling, experiments, and benchmarking workflow for manuscript:
 
-**Electrochemical reversibility revealed by bipolar perturbations for chemistry-inclusive retired lithium-ion battery diagnostics**
+**Electrochemical reversibility revealed by bipolar perturbations for lithium-ion battery diagnostics**
 
-## Important Information: Read Before Conducting Further Operations
+## Important Information: Read Before Conducting Further Actions
 
 This GitHub repository is organized around code and working folder structure. It is not intended to treat upload-oriented compressed packages as part of the logical repository structure.
 
