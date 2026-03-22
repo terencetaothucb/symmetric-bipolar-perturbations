@@ -32,10 +32,8 @@ In practice:
 
 The project is organized into two main technical parts:
 
-1. Data processing
-   The raw Excel workbooks are processed step by step into modeling-ready feature files.
-2. Model building
-   The processed features are used for benchmarking and comparative experiments.
+1. Data processing-The raw Excel workbooks are processed step by step into modeling-ready feature files.
+2. Model building-The processed features are used for benchmarking and comparative experiments.
 
 The current processing route is:
 
