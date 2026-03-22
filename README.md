@@ -82,8 +82,8 @@ This folder stores the working data used by the repository.
 
 This folder stores the intermediate and final outputs of the processing pipeline.
 
-- `Step1_Workstep/`: extracted workstep-sheet files; this is the output of `Step1/` and the input of `Step2/`
-- `Step2_CellLevel/`: per-cell pulse extraction results containing metadata and `U1/`-`U41/`
+- `Step1_Workstep/`: extracted workstep-sheet files; this is the output of `Step1` and the input of `Step2`
+- `Step2_CellLevel/`: per-cell pulse extraction results containing metadata and `U1`-`U41`
 - `Step3_ByPulse/`: pulse-width-wise aggregated workbooks with `SOC ALL` and `SOCxx` sheets
 - `Step4_SelectedFeatures/`: final modeling-input files containing the selected features used by the model code
 
