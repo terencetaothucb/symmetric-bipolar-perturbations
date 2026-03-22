@@ -280,6 +280,8 @@ The processed outputs are generated under:
 
 If data are distributed separately from GitHub, they should be unpacked and placed into the folder structure above before running the code.
 
+For clarity, the released repository dataset currently contains 709 batteries in total, including 36 batteries with `SOH > 1`. The model experiments and the manuscript analyses use the 673 batteries with `SOH <= 1`.
+
 ## 5. Code Availability
 
 All code needed for the current processing and modeling workflow is included in this repository under:
