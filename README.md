@@ -1,6 +1,10 @@
 # A rapid and scalable observable for battery capacity loss detection enabled by symmetric bipolar pulse perturbations
 
-This repository contains the data-processing, modeling, experiment, and benchmarking workflow for the manuscript **A rapid and scalable observable for battery capacity loss detection enabled by symmetric bipolar pulse perturbations**.
+This repository contains the data-processing, modeling, experiment, and benchmarking workflow associated with the following manuscript.
+
+**Associated manuscript**
+
+*A rapid and scalable observable for battery capacity loss detection enabled by symmetric bipolar pulse perturbations*
 
 - GitHub repository: https://github.com/terencetaothucb/symmetric-bipolar-perturbations
 - Public dataset, Zenodo Version 2: https://doi.org/10.5281/zenodo.23634967
