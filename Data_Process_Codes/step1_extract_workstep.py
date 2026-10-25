@@ -11,7 +11,15 @@ from typing import Iterable, List
 import pandas as pd
 
 from config import WORKSTEP_SHEET_NAME_CANDIDATES
-from utils import ensure_dir, filter_type_folders, is_first_part_file, list_excel_files, list_type_folders
+from utils import (
+    ensure_dir,
+    filter_type_folders,
+    is_first_part_file,
+    list_excel_files,
+    list_type_folders,
+    resolve_project_path,
+    step1_output_file_name,
+)
 
 
 def resolve_sheet_name(excel_path: Path, preferred_name: str | None, preferred_index: int | None) -> str | int:
@@ -42,7 +50,7 @@ def process_type_folder(type_folder: Path, output_root: Path, sheet_name: str | 
     for index, input_file in enumerate(input_files, start=1):
         chosen_sheet = resolve_sheet_name(input_file, sheet_name, sheet_index)
         data = pd.read_excel(input_file, sheet_name=chosen_sheet, engine="openpyxl")
-        output_file = output_folder / input_file.name
+        output_file = output_folder / step1_output_file_name(type_folder.name, input_file.name)
         data.to_excel(output_file, index=False, engine="openpyxl")
         print(f"[SAVE] ({index}/{len(input_files)}) {output_file}")
 
@@ -59,8 +67,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    input_root = Path(args.input_root)
-    output_root = Path(args.output_root)
+    input_root = resolve_project_path(args.input_root)
+    output_root = resolve_project_path(args.output_root)
 
     if not input_root.exists():
         raise FileNotFoundError(f"Input root not found: {input_root}")

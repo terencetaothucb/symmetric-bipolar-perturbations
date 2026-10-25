@@ -20,6 +20,7 @@ from utils import (
     parse_float_list,
     parse_int_list,
     parse_step_source_metadata,
+    resolve_project_path,
 )
 
 
@@ -132,8 +133,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    input_root = Path(args.input_root)
-    output_root = Path(args.output_root)
+    input_root = resolve_project_path(args.input_root)
+    output_root = resolve_project_path(args.output_root)
 
     if not input_root.exists():
         raise FileNotFoundError(f"Input root not found: {input_root}")

@@ -1,7 +1,14 @@
+"""Summarize SOH exclusions and optionally rebuild the manuscript cohort.
+
+The rebuilt dataset retains cells with SOH less than or equal to the selected
+threshold, then applies any additional documented exclusions from config.py.
+"""
+
 from __future__ import annotations
 
 import argparse
 import re
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -10,9 +17,22 @@ import numpy as np
 import pandas as pd
 
 
+DATA_PROCESS_CODES_DIR = Path(__file__).resolve().parents[1]
+if str(DATA_PROCESS_CODES_DIR) not in sys.path:
+    sys.path.insert(0, str(DATA_PROCESS_CODES_DIR))
+
+from utils import configured_exclusion_rules
+
+
 # Try the most common extracted-sheet names first, then fall back to the first
 # sheet if none of them are present.
 PREFERRED_SHEETS = ["Sheet1", "工作表1", "工步层", "工作步层", "Workstep_Layer"]
+
+
+def resolve_project_path(value: str | Path) -> Path:
+    """Resolve a data path relative to the repository root, independent of cwd."""
+    path = Path(value).expanduser()
+    return (Path(__file__).resolve().parents[2] / path).resolve()
 
 
 def ensure_dir(path: Path) -> None:
@@ -108,21 +128,47 @@ def detect_type_summary(type_folder: Path, threshold: float) -> Tuple[pd.DataFra
         return per_cell, per_cell
 
     per_cell["FilesOverThreshold"] = per_cell["FilesOverThreshold"].apply(lambda values: ",".join(sorted(set(values))))
-    excluded = per_cell[per_cell["MaxSOH"] > threshold].copy()
+    per_cell["ExclusionReason"] = ""
+    per_cell["ReferenceSOC"] = np.nan
+    per_cell["ReferenceQ_Ah"] = np.nan
+    per_cell["ReferenceSOH"] = np.nan
+
+    threshold_mask = per_cell["MaxSOH"] > threshold
+    per_cell.loc[threshold_mask, "ExclusionReason"] = f"SOH > {threshold:g} in the input data"
+    configured_mask = pd.Series(False, index=per_cell.index)
+
+    for rule in configured_exclusion_rules(type_folder.name):
+        id_match = per_cell["ID"].astype(str).str.strip().str.casefold().eq(str(rule["id"]).strip().casefold())
+        no_match = per_cell["No"].eq(int(rule["no"]))
+        rule_mask = id_match | no_match
+        configured_mask |= rule_mask
+        per_cell.loc[rule_mask, "ExclusionReason"] = str(rule["reason"])
+        per_cell.loc[rule_mask, "ReferenceSOC"] = float(rule["reference_soc"])
+        per_cell.loc[rule_mask, "ReferenceQ_Ah"] = float(rule["reference_q_ah"])
+        per_cell.loc[rule_mask, "ReferenceSOH"] = float(rule["reference_soh"])
+
+    excluded = per_cell[threshold_mask | configured_mask].copy()
     return per_cell, excluded
 
 
 def rebuild_filtered_dataset(type_folder: Path, output_root: Path, excluded_numbers: set[int]) -> None:
+    """Write a filtered copy while preserving every sheet in each workbook."""
     output_folder = output_root / type_folder.name
     ensure_dir(output_folder)
 
     for excel_file in list_excel_files(type_folder):
-        sheet_name = pick_sheet_name(excel_file)
-        data_frame = pd.read_excel(excel_file, sheet_name=sheet_name, engine="openpyxl")
-        no_column, _, _ = find_required_columns(list(data_frame.columns))
-        data_frame[no_column] = pd.to_numeric(data_frame[no_column], errors="coerce")
-        filtered = data_frame[~data_frame[no_column].isin(excluded_numbers)].copy()
-        filtered.to_excel(output_folder / excel_file.name, index=False, engine="openpyxl")
+        workbook = pd.ExcelFile(excel_file, engine="openpyxl")
+        with pd.ExcelWriter(output_folder / excel_file.name, engine="openpyxl") as writer:
+            for sheet_name in workbook.sheet_names:
+                data_frame = workbook.parse(sheet_name)
+                try:
+                    no_column, _, _ = find_required_columns(list(data_frame.columns))
+                except KeyError:
+                    filtered = data_frame
+                else:
+                    numeric_no = pd.to_numeric(data_frame[no_column], errors="coerce")
+                    filtered = data_frame[~numeric_no.isin(excluded_numbers)].copy()
+                filtered.to_excel(writer, sheet_name=sheet_name, index=False)
 
 
 def plot_soh_distributions(type_to_soh: Dict[str, np.ndarray], output_file: Path) -> None:
@@ -150,23 +196,31 @@ def plot_soh_distributions(type_to_soh: Dict[str, np.ndarray], output_file: Path
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Optional utility: summarize SOH>1 cells by battery type.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Summarize cells above an SOH threshold and optionally rebuild the "
+            "filtered manuscript cohort, including documented extra exclusions."
+        )
+    )
     parser.add_argument("--input-root", required=True, help="Root folder containing battery type folders.")
     parser.add_argument("--report-root", required=True, help="Directory for summary tables and plots.")
     parser.add_argument("--threshold", type=float, default=1.0, help="SOH threshold. Default: 1.0")
     parser.add_argument(
         "--rebuild-output-root",
         default=None,
-        help="Optional output root. If given, rebuild a filtered copy with cells over the threshold removed.",
+        help=(
+            "Optional output root. If given, rebuild a copy retaining SOH values "
+            "at or below the threshold and removing documented extra exclusions."
+        ),
     )
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    input_root = Path(args.input_root)
-    report_root = Path(args.report_root)
-    rebuild_output_root = Path(args.rebuild_output_root) if args.rebuild_output_root else None
+    input_root = resolve_project_path(args.input_root)
+    report_root = resolve_project_path(args.report_root)
+    rebuild_output_root = resolve_project_path(args.rebuild_output_root) if args.rebuild_output_root else None
 
     if not input_root.exists():
         raise FileNotFoundError(f"Input root not found: {input_root}")
@@ -183,12 +237,16 @@ def main() -> None:
         per_cell, excluded = detect_type_summary(type_folder, args.threshold)
         total_count = 0 if per_cell.empty else len(per_cell)
         excluded_count = 0 if excluded.empty else len(excluded)
+        threshold_count = 0 if per_cell.empty else int((per_cell["MaxSOH"] > args.threshold).sum())
+        configured_extra_count = excluded_count - threshold_count
 
         summary_rows.append(
             {
                 "TypeFolder": type_folder.name,
                 "QuantityTotal": total_count,
-                "QuantitySOH_GT_Threshold": excluded_count,
+                "QuantitySOH_GT_Threshold": threshold_count,
+                "QuantityConfiguredExtraExclusions": configured_extra_count,
+                "QuantityExcludedTotal": excluded_count,
                 "Threshold": args.threshold,
             }
         )
@@ -196,10 +254,15 @@ def main() -> None:
             type_to_soh[type_folder.name] = per_cell["MaxSOH"].to_numpy(dtype=float)
         if not excluded.empty:
             excluded_rows.append(excluded)
-        if rebuild_output_root is not None and not excluded.empty:
-            rebuild_filtered_dataset(type_folder, rebuild_output_root, set(excluded["No"].tolist()))
+        if rebuild_output_root is not None:
+            excluded_numbers = set() if excluded.empty else set(excluded["No"].tolist())
+            rebuild_filtered_dataset(type_folder, rebuild_output_root, excluded_numbers)
 
-        print(f"[INFO] {type_folder.name}: total={total_count}, soh_gt_threshold={excluded_count}")
+        print(
+            f"[INFO] {type_folder.name}: total={total_count}, "
+            f"soh_gt_threshold={threshold_count}, configured_extra={configured_extra_count}, "
+            f"excluded_total={excluded_count}"
+        )
 
     summary_frame = pd.DataFrame(summary_rows)
     summary_frame.to_excel(report_root / "summary_quantity_soh_gt1.xlsx", index=False, engine="openpyxl")
@@ -208,7 +271,19 @@ def main() -> None:
     if excluded_rows:
         excluded_frame = pd.concat(excluded_rows, ignore_index=True)
     else:
-        excluded_frame = pd.DataFrame(columns=["TypeFolder", "No", "ID", "MaxSOH", "FilesOverThreshold"])
+        excluded_frame = pd.DataFrame(
+            columns=[
+                "TypeFolder",
+                "No",
+                "ID",
+                "MaxSOH",
+                "FilesOverThreshold",
+                "ExclusionReason",
+                "ReferenceSOC",
+                "ReferenceQ_Ah",
+                "ReferenceSOH",
+            ]
+        )
     excluded_frame.to_excel(report_root / "excluded_cells.xlsx", index=False, engine="openpyxl")
     excluded_frame.to_csv(report_root / "excluded_cells.csv", index=False, encoding="utf-8-sig")
 

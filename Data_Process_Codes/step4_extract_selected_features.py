@@ -20,6 +20,7 @@ from utils import (
     list_type_folders,
     normalize_columns,
     parse_step3_file_metadata,
+    resolve_project_path,
 )
 
 
@@ -63,11 +64,28 @@ def make_u_mapping() -> Dict[tuple, Dict[str, str]]:
 
 
 U_MAP = make_u_mapping()
-FEATURE_PREFIXES_TO_DROP = ("Hyst_M3_", "fai_irrev_", "Reff_", "E_loss_", "Eloss_proxy_")
+FEATURE_PREFIXES_TO_DROP = ("Hyst_M3_", "fai_irrev_", "R0_", "Reff_", "E_loss_", "Eloss_proxy_")
 
 
 def compute_selected_features(data_frame: pd.DataFrame, pulse_width_seconds: float) -> pd.DataFrame:
-    """Append fai_irrev, Reff, and E_loss columns to one Step3 sheet."""
+    """Append fai_irrev, resistance, and loss features to one Step3 sheet.
+
+    For each pulse polarity, R0 uses the instantaneous step voltage and Reff
+    uses the end-of-pulse voltage:
+
+        R0   = abs(U_step - U_pre) / abs(I)
+        Reff = abs(U_end  - U_pre) / abs(I)
+
+    where abs(I) = C-rate * Qn.  The scalar manuscript comparisons use the
+    arithmetic mean of the positive- and negative-pulse resistance values:
+
+        R0_avg   = mean(R0_positive_pulse, R0_negative_pulse)
+        Reff_avg = mean(Reff_positive_pulse, Reff_negative_pulse)
+
+    Only the scalar ``*_avg_*`` resistance columns are stored in Step4. The
+    polarity-specific resistance values are temporary calculation variables
+    and are not written to the output workbook.
+    """
     data_frame = data_frame.copy()
     data_frame.columns = normalize_columns(data_frame.columns)
     for u_index in range(1, 42):
@@ -79,6 +97,7 @@ def compute_selected_features(data_frame: pd.DataFrame, pulse_width_seconds: flo
 
     qn = pd.to_numeric(data_frame["Qn"], errors="coerce").astype(float).values
     appended_columns: List[str] = []
+    average_columns: List[str] = []
 
     for c_rate in C_RATES_ABS:
         label = c_rate_label(c_rate)
@@ -92,29 +111,45 @@ def compute_selected_features(data_frame: pd.DataFrame, pulse_width_seconds: flo
         data_frame[fai_irrev_name] = fai_irrev
         appended_columns.append(fai_irrev_name)
 
-        # Reff is computed from the end-minus-pre pulse voltage divided by the
-        # absolute current. E_loss uses the corresponding Joule-loss proxy.
+        # R0 uses the instantaneous step response; Reff uses the end-of-pulse
+        # response. Only their two-polarity arithmetic means are persisted.
+        # E_loss remains polarity-specific because it is a separate diagnostic
+        # quantity rather than one of the scalar resistance comparisons.
         current_amperes = c_rate * qn
+        r0_by_sign: Dict[int, np.ndarray] = {}
+        reff_by_sign: Dict[int, np.ndarray] = {}
         for sign in (+1, -1):
             polarity = "p" if sign > 0 else "n"
             pre_column = U_MAP[(c_rate, sign)]["pre"]
+            step_column = U_MAP[(c_rate, sign)]["step"]
             end_column = U_MAP[(c_rate, sign)]["end"]
 
             u_pre = pd.to_numeric(data_frame[pre_column], errors="coerce").astype(float).values
+            u_step = pd.to_numeric(data_frame[step_column], errors="coerce").astype(float).values
             u_end = pd.to_numeric(data_frame[end_column], errors="coerce").astype(float).values
-            delta_v = u_end - u_pre
+            delta_v_step = u_step - u_pre
+            delta_v_end = u_end - u_pre
 
-            reff = np.where(current_amperes != 0, np.abs(delta_v) / current_amperes, np.nan)
+            r0 = np.where(current_amperes != 0, np.abs(delta_v_step) / current_amperes, np.nan)
+            reff = np.where(current_amperes != 0, np.abs(delta_v_end) / current_amperes, np.nan)
             e_loss = np.where(np.isfinite(reff), (current_amperes ** 2) * reff * pulse_width_seconds, np.nan)
 
-            reff_name = f"Reff_{polarity}_{label}"
             e_loss_name = f"E_loss_{polarity}_{label}"
-            data_frame[reff_name] = reff
             data_frame[e_loss_name] = e_loss
-            appended_columns.extend([reff_name, e_loss_name])
+            r0_by_sign[sign] = r0
+            reff_by_sign[sign] = reff
+            appended_columns.append(e_loss_name)
+
+        r0_avg_name = f"R0_avg_{label}"
+        reff_avg_name = f"Reff_avg_{label}"
+        data_frame[r0_avg_name] = (r0_by_sign[+1] + r0_by_sign[-1]) / 2.0
+        data_frame[reff_avg_name] = (reff_by_sign[+1] + reff_by_sign[-1]) / 2.0
+        average_columns.extend([r0_avg_name, reff_avg_name])
 
     base_columns = [column for column in data_frame.columns if not column.startswith(FEATURE_PREFIXES_TO_DROP)]
-    return data_frame.loc[:, base_columns + appended_columns]
+    # Preserve the historical non-resistance columns and append only the
+    # scalar-average R0/Reff inputs used by the manuscript configurations.
+    return data_frame.loc[:, base_columns + appended_columns + average_columns]
 
 
 def process_workbook(input_file: Path, output_file: Path) -> None:
@@ -150,7 +185,7 @@ def process_type_folder(type_folder: Path, output_root: Path, overwrite: bool) -
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Step4: compute fai_irrev, Reff and E_loss from Step3 aggregated workbooks."
+        description="Step4: compute fai_irrev, scalar-average R0/Reff, and E_loss from Step3 workbooks."
     )
     parser.add_argument("--input-root", required=True, help="Root directory containing Step3 aggregated workbooks.")
     parser.add_argument("--output-root", required=True, help="Root directory for Step4 selected-feature outputs.")
@@ -161,8 +196,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    input_root = Path(args.input_root)
-    output_root = Path(args.output_root)
+    input_root = resolve_project_path(args.input_root)
+    output_root = resolve_project_path(args.output_root)
 
     if not input_root.exists():
         raise FileNotFoundError(f"Input root not found: {input_root}")

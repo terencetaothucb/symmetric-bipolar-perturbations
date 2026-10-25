@@ -3,15 +3,19 @@
 Model_Benchmark_FaiIrrevReff_AllInOne.py
 
 Benchmark runner for PulseBat Step4 outputs.
-Available feature groups are reduced to:
+Manuscript feature groups are limited to:
 - fai_irrev
-- Reff
+- scalar R0_avg
+- scalar Reff_avg
+- raw voltage checkpoints (U1-U41)
 
 Default data root:
-E:/Datasets/PulseBat_all/Data/Data_Process_Output/Step4_SelectedFeatures
+Data/Data_Process_Output/Step4_SelectedFeatures_with_R0_Reff
 
 Default output root:
-E:/Datasets/PulseBat_all/Data/Model_Output
+Data/Model_Output
+
+Relative data and output paths are resolved from the repository root.
 """
 
 from __future__ import annotations
@@ -52,6 +56,19 @@ try:
     _TORCH_AVAILABLE = True
 except Exception:
     _TORCH_AVAILABLE = False
+    # Keep this module importable in environments (including joblib worker
+    # processes) where torch or one of its binary dependencies is unavailable.
+    # build_model() still raises a clear ImportError if a torch-backed model is
+    # explicitly requested.
+    torch = None
+    optim = None
+    TensorDataset = None
+    DataLoader = None
+
+    class _NNUnavailable:
+        Module = object
+
+    nn = _NNUnavailable()
 
 
 # ============================================================
@@ -62,17 +79,73 @@ FEATURE_GROUPS: Dict[str, List[str]] = {
     "fai_irrev": [
         "fai_irrev_0.5C", "fai_irrev_1C", "fai_irrev_1.5C", "fai_irrev_2C", "fai_irrev_2.5C",
     ],
-    "Reff": [
-        "Reff_p_0.5C", "Reff_n_0.5C", "Reff_p_1C", "Reff_n_1C", "Reff_p_1.5C", "Reff_n_1.5C",
-        "Reff_p_2C", "Reff_n_2C", "Reff_p_2.5C", "Reff_n_2.5C",
-    ],
+    "Reff_avg": ["Reff_avg_0.5C", "Reff_avg_1C", "Reff_avg_1.5C", "Reff_avg_2C", "Reff_avg_2.5C"],
+    "R0_avg": ["R0_avg_0.5C", "R0_avg_1C", "R0_avg_1.5C", "R0_avg_2C", "R0_avg_2.5C"],
+    "raw_U": ["U1", "U5", "U9", "U13", "U17", "U21", "U25", "U29", "U33", "U37", "U41"],
 }
 
 FEATURE_COMBOS: Dict[str, List[str]] = {
     "fai_irrev_Only": ["fai_irrev"],
-    "Reff_Only": ["Reff"],
-    "fai_irrev_Reff": ["fai_irrev", "Reff"],
+    "Reff_avg_Only": ["Reff_avg"],
+    "R0_avg_Only": ["R0_avg"],
+    "raw_U_Only": ["raw_U"],
+    "fai_irrev_Reff_avg": ["fai_irrev", "Reff_avg"],
+    "fai_irrev_R0_avg": ["fai_irrev", "R0_avg"],
 }
+
+# Exact single-C-rate inputs used by the manuscript comparison experiments.
+# Scalar R0/Reff averages are stored explicitly in every relevant Step4 sheet.
+RAW_U_BY_C_RATE: Dict[str, List[str]] = {
+    "0.5C": ["U1", "U5", "U9"],
+    "1C": ["U9", "U13", "U17"],
+    "1.5C": ["U17", "U21", "U25"],
+    "2C": ["U25", "U29", "U33"],
+    "2.5C": ["U33", "U37", "U41"],
+}
+
+PAPER_FEATURE_CASES = (
+    "fai_irrev",
+    "R0_avg",
+    "Reff_avg",
+    "raw_U",
+    "fai_irrev_R0_avg",
+    "fai_irrev_Reff_avg",
+)
+
+
+def paper_feature_columns(case_name: str, c_rate: str) -> List[str]:
+    """Return the exact columns for one manuscript comparison case."""
+    case_name = str(case_name).strip()
+    c_rate = str(c_rate).strip()
+    if c_rate not in RAW_U_BY_C_RATE:
+        raise KeyError(f"Unknown C-rate '{c_rate}'. Available values: {list(RAW_U_BY_C_RATE)}")
+    if case_name not in PAPER_FEATURE_CASES:
+        raise KeyError(f"Unknown paper feature case '{case_name}'. Available cases: {list(PAPER_FEATURE_CASES)}")
+
+    if case_name == "raw_U":
+        return list(RAW_U_BY_C_RATE[c_rate])
+    if case_name == "fai_irrev":
+        return [f"fai_irrev_{c_rate}"]
+    if case_name in {"R0_avg", "Reff_avg"}:
+        return [f"{case_name}_{c_rate}"]
+    if case_name == "fai_irrev_R0_avg":
+        return [f"fai_irrev_{c_rate}", f"R0_avg_{c_rate}"]
+    if case_name == "fai_irrev_Reff_avg":
+        return [f"fai_irrev_{c_rate}", f"Reff_avg_{c_rate}"]
+    raise AssertionError(f"Unhandled paper feature case: {case_name}")
+
+
+def paper_feature_spec(case_name: str, c_rate: str) -> Dict[str, Any]:
+    """Build a feature_spec dictionary for one manuscript comparison case."""
+    return dict(
+        name=f"{case_name}__{c_rate}",
+        combo=None,
+        include_groups=None,
+        exclude_groups=None,
+        add_features=paper_feature_columns(case_name, c_rate),
+        drop_features=None,
+        keep_regex=None,
+    )
 
 def _unique_preserve_order(xs: List[str]) -> List[str]:
     seen = set()
@@ -167,7 +240,7 @@ def feature_tag_from_spec(spec: Dict[str, Any]) -> str:
 # ============================================================
 
 CONFIG: Dict[str, Any] = dict(
-    data_root=r"E:\Datasets\PulseBat_all\Data\Data_Process_Output\Step4_SelectedFeatures",
+    data_root="Data/Data_Process_Output/Step4_SelectedFeatures_with_R0_Reff",
 
     material="20Ah LFP",
     width_ms=5000,
@@ -188,10 +261,14 @@ CONFIG: Dict[str, Any] = dict(
     seeds=list(range(100)),
 
     # Models to benchmark in each run.
-    models=["linear", "ridge", "lasso", "en", "svm", "rf", "xgb", "gpr", "mlp", "transformer", "informer"],
+    models=["linear", "ridge", "lasso", "en", "svm", "rf", "gpr", "mlp", "transformer", "informer"],
 
     standardize=True,
     perm_repeats=10,
+    # Single-process defaults avoid excessive memory use on Windows. Increase
+    # these values only when the host has sufficient RAM/page-file capacity.
+    perm_n_jobs=1,
+    rf_n_jobs=1,
     topk_featimp=50,
 
     # Torch model training hyperparameters.
@@ -203,7 +280,7 @@ CONFIG: Dict[str, Any] = dict(
     torch_patience=30,
     torch_seed_offset=12345,    # Makes torch initialization depend on the run seed deterministically.
 
-    out_dir=r"E:\Datasets\PulseBat_all\Data\Model_Output",
+    out_dir="Data/Model_Output",
     show_progress=True,
 )
 
@@ -239,11 +316,12 @@ def resolve_data_root(cfg: Dict[str, Any], project_root: Path) -> Path:
         return p
 
     candidates = [
-        (project_root / "Data" / "Data_Process_Output" / "Step4_SelectedFeatures"),
-        (project_root / "Fts" / "Fts-For-Model"),
-        (project_root / "Fts" / "Fts_For_Model"),
-        (project_root / "Fts-For-Model"),
-        (project_root / "Fts_For_Model"),
+        (
+            project_root
+            / "Data"
+            / "Data_Process_Output"
+            / "Step4_SelectedFeatures_with_R0_Reff"
+        ),
     ]
     for c in candidates:
         if c.is_dir():
@@ -252,17 +330,19 @@ def resolve_data_root(cfg: Dict[str, Any], project_root: Path) -> Path:
     tried = "\n  - " + "\n  - ".join(str(c.resolve()) for c in candidates)
     raise FileNotFoundError(
         "Cannot auto-detect data_root.\n"
-        "Please set CONFIG['data_root'] to the absolute path of your Step4_SelectedFeatures folder.\n"
+        "Please set CONFIG['data_root'] to the unified "
+        "Step4_SelectedFeatures_with_R0_Reff folder, relative to the repository root.\n"
         f"Tried:{tried}"
     )
 
 def resolve_run_dirs(cfg: Dict[str, Any], run_tag: str) -> Tuple[Path, Path, Path]:
     """
+    Resolve the output root from the repository root.
     Returns: (run_dir, summary_dir, raw_dir)
     """
     out = Path(cfg["out_dir"]).expanduser()
     if not out.is_absolute():
-        out = (script_dir() / out).resolve()
+        out = (find_project_root(script_dir()) / out).resolve()
     else:
         out = out.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -329,6 +409,7 @@ def detect_soc_sheet(xlsx_path: Path, soc: int) -> str:
             return lower_map[t.lower()]
     raise KeyError(f"Cannot find SOC sheet for soc={soc} in '{xlsx_path.name}'. Available: {sheets[:30]}")
 
+
 def detect_label_col(df: pd.DataFrame, hint: str = "SOH") -> str:
     cols = list(df.columns)
     if hint in cols:
@@ -361,6 +442,7 @@ def map_feature_list(df: pd.DataFrame, feature_list: List[str]) -> List[str]:
         )
     return mapped
 
+
 def to_numeric_frame(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
     out = df[cols].copy()
     for c in cols:
@@ -375,9 +457,9 @@ def load_xy(
 ) -> Tuple[pd.DataFrame, pd.Series, List[str], str, str]:
     sheet = detect_soc_sheet(xlsx_path, soc)
     df = pd.read_excel(xlsx_path, sheet_name=sheet, engine="openpyxl")
+    mapped_features = map_feature_list(df, feature_list)
 
     label_col = detect_label_col(df, label_hint)
-    mapped_features = map_feature_list(df, feature_list)
 
     Xdf = to_numeric_frame(df, mapped_features)
     y = pd.to_numeric(df[label_col], errors="coerce")
@@ -430,25 +512,9 @@ def native_importance(est, model_name: str, feature_names: List[str]) -> Optiona
         imp = np.asarray(est.feature_importances_).reshape(-1)
         df = pd.DataFrame({"feature": feature_names, "importance": imp})
         return df.sort_values("importance", ascending=False).reset_index(drop=True)
-    # xgb gain
-    if m == "xgb":
-        try:
-            booster = est.get_booster()
-            score = booster.get_score(importance_type="gain")
-            imp = np.zeros(len(feature_names), dtype=float)
-            for k, v in score.items():
-                mm = re.match(r"f(\d+)", k)
-                if mm:
-                    j = int(mm.group(1))
-                    if 0 <= j < len(imp):
-                        imp[j] = float(v)
-            df = pd.DataFrame({"feature": feature_names, "importance": imp})
-            return df.sort_values("importance", ascending=False).reset_index(drop=True)
-        except Exception:
-            return None
     return None
 
-def permutation_importance_df(model, X_test, y_test, feature_names, n_repeats, seed) -> pd.DataFrame:
+def permutation_importance_df(model, X_test, y_test, feature_names, n_repeats, seed, n_jobs=1) -> pd.DataFrame:
     def _neg_mae(est, X, y):
         pred = est.predict(X)
         return -metric_mae(y, pred)
@@ -460,7 +526,7 @@ def permutation_importance_df(model, X_test, y_test, feature_names, n_repeats, s
         scoring=_neg_mae,
         n_repeats=int(n_repeats),
         random_state=int(seed),
-        n_jobs=-1,
+        n_jobs=int(n_jobs),
     )
     df = pd.DataFrame({
         "feature": feature_names,
@@ -588,6 +654,7 @@ class TorchRegressor:
         self._set_seed()
         X = np.asarray(X, dtype=np.float32)
         y = np.asarray(y, dtype=np.float32).reshape(-1)
+        self.n_features_in_ = int(X.shape[1])
 
         # Split the training fold again to create an internal validation set.
         n = len(y)
@@ -650,7 +717,12 @@ class TorchRegressor:
             self.net.load_state_dict(best_state)
 
         self._is_fit = True
+        self.is_fitted_ = True
         return self
+
+    def __sklearn_is_fitted__(self) -> bool:
+        """Expose fitted state to scikit-learn Pipeline/check_is_fitted."""
+        return self._is_fit
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         if not self._is_fit:
@@ -688,9 +760,14 @@ def build_model(name: str, random_state: int, n_features: int, cfg: Dict[str, An
     if name in ["svm", "svr"]:
         return SVR(kernel="rbf", C=10.0, gamma="scale", epsilon=0.01)
 
-    # Tree-based and boosted models
+    # Tree-based models
     if name == "rf":
-        return RandomForestRegressor(n_estimators=600, random_state=random_state, n_jobs=-1, min_samples_leaf=1)
+        return RandomForestRegressor(
+            n_estimators=600,
+            random_state=random_state,
+            n_jobs=int(cfg.get("rf_n_jobs", 1)),
+            min_samples_leaf=1,
+        )
 
     # Kernel and neural-network baselines
     if name == "gpr":
@@ -710,24 +787,6 @@ def build_model(name: str, random_state: int, n_features: int, cfg: Dict[str, An
             early_stopping=True,
             n_iter_no_change=50,
             validation_fraction=0.15,
-        )
-
-    # XGBoost
-    if name == "xgb":
-        try:
-            import xgboost as xgb  # noqa
-        except Exception as e:
-            raise ImportError("xgboost not installed. `pip install xgboost` or remove 'xgb' from models.") from e
-        return xgb.XGBRegressor(
-            n_estimators=2000,
-            learning_rate=0.03,
-            max_depth=6,
-            subsample=0.9,
-            colsample_bytree=0.9,
-            reg_lambda=1.0,
-            random_state=random_state,
-            n_jobs=-1,
-            objective="reg:squarederror",
         )
 
     # Torch-backed models
@@ -836,6 +895,7 @@ def run(cfg: Dict[str, Any]) -> Path:
     test_size = float(cfg["test_size"])
     standardize = bool(cfg.get("standardize", True))
     perm_repeats = int(cfg.get("perm_repeats", 10))
+    perm_n_jobs = int(cfg.get("perm_n_jobs", 1))
     topk_featimp = cfg.get("topk_featimp", 50)
 
     prog(f"[INFO] Data: {material} | W={width_ms} ms | SOC={soc} | sheet={sheet_name} | N={len(y)} | d={X.shape[1]}", show_progress)
@@ -874,7 +934,7 @@ def run(cfg: Dict[str, Any]) -> Path:
 
             # Standardize the feature matrix for models that benefit from scaling.
             need_scaler = standardize and (model_name in ["linear", "ridge", "lasso", "en", "elasticnet", "svm", "svr", "gpr", "mlp", "transformer", "informer"])
-            if need_scaler and (model_name not in ["rf", "xgb"]):
+            if need_scaler and model_name != "rf":
                 model = Pipeline([("scaler", StandardScaler()), ("est", base)])
             else:
                 model = base
@@ -953,7 +1013,15 @@ def run(cfg: Dict[str, Any]) -> Path:
             core = model.named_steps["est"] if hasattr(model, "named_steps") else model
             fi = native_importance(core, model_name, feature_cols)
             if fi is None:
-                fi = permutation_importance_df(model, X_test, y_test, feature_cols, perm_repeats, seed)
+                fi = permutation_importance_df(
+                    model,
+                    X_test,
+                    y_test,
+                    feature_cols,
+                    perm_repeats,
+                    seed,
+                    n_jobs=perm_n_jobs,
+                )
 
             fi["feature_tag"] = feat_tag
             fi["feature_name"] = feat_spec_resolved.get("name", "")

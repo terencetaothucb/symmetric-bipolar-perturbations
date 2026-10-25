@@ -8,7 +8,13 @@ import re
 from pathlib import Path
 from typing import Iterable, List, Sequence
 
-from config import RELEVANT_SHEET_NAME_REGEXES
+from config import EXCLUDED_CELLS, RELEVANT_SHEET_NAME_REGEXES
+
+
+def resolve_project_path(value: str | Path) -> Path:
+    """Resolve a data path relative to the repository root, independent of cwd."""
+    path = Path(value).expanduser()
+    return (Path(__file__).resolve().parents[1] / path).resolve()
 
 
 def ensure_dir(path: Path) -> None:
@@ -54,6 +60,29 @@ def list_excel_files(folder: Path) -> List[Path]:
         ],
         key=lambda path: path.name.lower(),
     )
+
+
+def step1_output_file_name(type_folder_name: str, source_file_name: str) -> str:
+    """Return the released Step1 filename for one raw workbook.
+
+    The 35 Ah LFP raw archive uses numeric IDs in filenames, while the released
+    Step1/Step2 products use the original cell-ID form with the Chinese ``号``
+    suffix. Other battery types retain their source filenames unchanged.
+    """
+    normalized_type = " ".join(str(type_folder_name).split()).casefold()
+    if normalized_type != "35ah lfp":
+        return source_file_name
+    return re.sub(r"(_ID_\d+)(?:号)?(\.xlsx)$", r"\1号\2", source_file_name, flags=re.IGNORECASE)
+
+
+def configured_exclusion_rules(type_folder_name: str) -> List[dict]:
+    """Return the documented cell-exclusion rules for one battery type."""
+    normalized_type = " ".join(str(type_folder_name).split()).casefold()
+    return [
+        rule
+        for rule in EXCLUDED_CELLS
+        if " ".join(str(rule["type_folder"]).split()).casefold() == normalized_type
+    ]
 
 
 def is_first_part_file(file_name: str) -> bool:

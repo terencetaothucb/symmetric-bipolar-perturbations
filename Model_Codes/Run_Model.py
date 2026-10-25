@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Experiment_AllMaterials_SOC405070_W5000_FaiIrrevOnly_byCRate.py
+Manuscript feature-comparison matrix runner.
 
 Purpose:
-- Run the fai_irrev-only experiment on all material folders under the Step4 output root.
+- Run the manuscript feature cases on all material folders under the R0-augmented Step4 root.
 - Use width_ms=5000.
 - Use soc in {40, 50, 70}.
-- Keep only one C-rate per run via keep_regex.
+- Use the exact single-C-rate columns declared by Model_backbone.paper_feature_spec().
+- Benchmark the ten released models.
 """
 
 from __future__ import annotations
@@ -20,26 +21,9 @@ except ImportError:
     import Model_backbone as bench
 
 
-DEFAULT_DATA_ROOT = Path(r"E:\Datasets\PulseBat_all\Data\Data_Process_Output\Step4_SelectedFeatures")
-DEFAULT_OUT_DIR = Path(r"E:\Datasets\PulseBat_all\Data\Model_Output")
-
-
-def crate_to_keep_regex(crate_str: str) -> str:
-    """
-    Convert a C-rate label into a regex used by build_feature_list(keep_regex=...).
-
-    Examples:
-      "0.5C" -> r"_0\.5C$"
-      "1C" -> r"_1C$"
-      "2.5C" -> r"_2\.5C$"
-    """
-    crate_str = crate_str.strip()
-    if crate_str.endswith("C"):
-        core = crate_str[:-1]
-    else:
-        core = crate_str
-    core = core.replace(".", r"\.")
-    return rf"_{core}C$"
+# Relative paths are resolved from the repository root rather than cwd.
+DEFAULT_DATA_ROOT = Path("Data/Data_Process_Output/Step4_SelectedFeatures_with_R0_Reff")
+DEFAULT_OUT_DIR = Path("Data/Model_Output")
 
 
 def main() -> None:
@@ -49,8 +33,9 @@ def main() -> None:
     width_ms = 5000
     soc_list = [50, 40, 70]
 
-    data_root = DEFAULT_DATA_ROOT
-    out_dir_root = DEFAULT_OUT_DIR
+    project_root = bench.find_project_root(Path(__file__).resolve().parent)
+    data_root = (project_root / DEFAULT_DATA_ROOT.expanduser()).resolve()
+    out_dir_root = (project_root / DEFAULT_OUT_DIR.expanduser()).resolve()
     if not data_root.is_dir():
         raise FileNotFoundError(f"Step4 data root not found: {data_root}")
 
@@ -59,16 +44,17 @@ def main() -> None:
         if list(material_dir.glob(f"*_W_{width_ms}.xlsx")):
             materials.append(material_dir.name)
 
-    feature_combo = "fai_irrev_Only"
+    # These are the six feature configurations reported in the manuscript.
+    # Keep this list synchronized with Model_backbone.PAPER_FEATURE_CASES.
+    experiment_cases = list(bench.PAPER_FEATURE_CASES)
 
-    # Each run keeps only one C-rate from the selected feature family.
-    # Reduce this list to run fewer cases, for example only ["1C"].
+    # Each run uses one C-rate-specific input definition.
     crate_list = ["0.5C", "1C", "1.5C", "2C", "2.5C"]
 
     # -----------------------------
     # Global knobs
     # -----------------------------
-    MODELS = ["linear", "ridge", "lasso", "en", "svm", "rf", "xgb", "gpr", "mlp", "transformer", "informer"]
+    MODELS = ["linear", "ridge", "lasso", "en", "svm", "rf", "gpr", "mlp", "transformer", "informer"]
     SEEDS = list(range(100))  # For quick checks, reduce this list, for example list(range(5)).
     TEST_SIZE = 0.2
     SHOW_PROGRESS = True
@@ -83,49 +69,48 @@ def main() -> None:
     print(f"Output root: {out_dir_root}")
     print(f"Materials: {materials}")
     print(f"SOCs: {soc_list}")
-    print(f"Feature combo: {feature_combo}")
-    print(f"C-rates: {crate_list}  (each run uses one keep_regex)")
+    print(f"Feature cases: {experiment_cases}")
+    print(f"C-rates: {crate_list}")
     print(f"width_ms={width_ms}")
     print(f"Models: {MODELS}")
     print(f"Seeds: {len(SEEDS)} runs")
     print("========================================================\n")
 
-    total = len(materials) * len(soc_list) * len(crate_list)
+    total = len(materials) * len(soc_list) * len(experiment_cases) * len(crate_list)
     job = 0
 
     for mat in materials:
         for soc in soc_list:
-            for crate in crate_list:
-                job += 1
-                keep_regex = crate_to_keep_regex(crate)
-                print(f"\n[{job}/{total}] RUN => material='{mat}', SOC={soc}, combo='{feature_combo}', crate='{crate}', keep_regex='{keep_regex}'")
+            for case_name in experiment_cases:
+                for crate in crate_list:
+                    job += 1
+                    feature_spec = bench.paper_feature_spec(case_name, crate)
+                    feature_columns = feature_spec["add_features"]
+                    print(
+                        f"\n[{job}/{total}] RUN => material='{mat}', SOC={soc}, "
+                        f"case='{case_name}', crate='{crate}', features={feature_columns}"
+                    )
 
-                cfg = copy.deepcopy(bench.CONFIG)
+                    cfg = copy.deepcopy(bench.CONFIG)
+                    cfg["data_root"] = DEFAULT_DATA_ROOT.as_posix()
+                    cfg["out_dir"] = DEFAULT_OUT_DIR.as_posix()
+                    cfg["show_progress"] = SHOW_PROGRESS
+                    cfg["material"] = mat
+                    cfg["width_ms"] = width_ms
+                    cfg["soc"] = soc
+                    cfg["test_size"] = TEST_SIZE
+                    cfg["seeds"] = SEEDS
+                    cfg["models"] = MODELS
+                    cfg["feature_spec"] = feature_spec
 
-                cfg["data_root"] = str(data_root)
-                cfg["out_dir"] = str(out_dir_root)
-                cfg["show_progress"] = SHOW_PROGRESS
-                cfg["material"] = mat
-                cfg["width_ms"] = width_ms
-                cfg["soc"] = soc
-                cfg["test_size"] = TEST_SIZE
-                cfg["seeds"] = SEEDS
-                cfg["models"] = MODELS
-                cfg["feature_spec"] = dict(
-                    name=f"{feature_combo}__{crate}",
-                    combo=feature_combo,
-                    include_groups=None,
-                    exclude_groups=None,
-                    add_features=None,
-                    drop_features=None,
-                    keep_regex=keep_regex,
-                )
-
-                try:
-                    output_dir = bench.run(cfg)
-                    print(f"[DONE] output: {output_dir}")
-                except Exception as exc:
-                    print(f"[SKIP] material='{mat}', SOC={soc}, crate='{crate}' -> {type(exc).__name__}: {exc}")
+                    try:
+                        output_dir = bench.run(cfg)
+                        print(f"[DONE] output: {output_dir}")
+                    except Exception as exc:
+                        print(
+                            f"[SKIP] material='{mat}', SOC={soc}, case='{case_name}', "
+                            f"crate='{crate}' -> {type(exc).__name__}: {exc}"
+                        )
 
     print("\n=== ALL MATRIX RUNS FINISHED ===")
 

@@ -5,14 +5,13 @@ Run the main PulseBat processing pipeline from Step1 through Step4.
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 from config import DEFAULT_PT_VALUES, DEFAULT_SOC_VALUES
 from step1_extract_workstep import process_type_folder as run_step1_type
 from step2_extract_pulse_features import process_type_folder as run_step2_type
 from step3_collect_by_pulse import aggregate_one_type_folder as run_step3_type
 from step4_extract_selected_features import process_type_folder as run_step4_type
-from utils import ensure_dir, filter_type_folders, list_type_folders, parse_float_list, parse_int_list
+from utils import ensure_dir, filter_type_folders, list_type_folders, parse_float_list, parse_int_list, resolve_project_path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,11 +36,11 @@ def main() -> None:
     """Parse CLI arguments and run the four processing steps in sequence."""
     args = build_parser().parse_args()
 
-    raw_root = Path(args.raw_root)
-    step1_root = Path(args.step1_root)
-    step2_root = Path(args.step2_root)
-    step3_root = Path(args.step3_root)
-    step4_root = Path(args.step4_root)
+    raw_root = resolve_project_path(args.raw_root)
+    step1_root = resolve_project_path(args.step1_root)
+    step2_root = resolve_project_path(args.step2_root)
+    step3_root = resolve_project_path(args.step3_root)
+    step4_root = resolve_project_path(args.step4_root)
 
     if not raw_root.exists():
         raise FileNotFoundError(f"Raw root not found: {raw_root}")
