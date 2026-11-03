@@ -7,7 +7,7 @@ This repository contains the data-processing, modeling, experiment, and benchmar
 *A rapid and scalable observable for battery capacity loss detection enabled by symmetric bipolar pulse perturbations*
 
 - GitHub repository: https://github.com/terencetaothucb/symmetric-bipolar-perturbations
-- Public dataset, Zenodo Version 2: https://doi.org/10.5281/zenodo.23634967
+- Public dataset (Zenodo DOI): https://doi.org/10.5281/zenodo.23634967
 
 After downloading the three archives and the additional 68 Ah LFP cell No. 6 workbook from Zenodo, arrange the working data using these relative paths:
 
@@ -40,7 +40,7 @@ The current data processing route is:
 
 `Data/Raw_Data -> Data/Data_Process_Output/Step1_Workstep -> Data/Data_Process_Output/Step2_CellLevel -> Data/Data_Process_Output/Step3_ByPulse -> Data/Data_Process_Output/Step4_SelectedFeatures_with_R0_Reff -> Data/Model_Output`
 
-The current workflow follows the processing and modeling route used in this repository version.
+This repository implements the processing and modeling route shown above.
 
 ## 2. Repository Structure
 
@@ -65,31 +65,35 @@ The current workflow follows the processing and modeling route used in this repo
 
 Only the two code folders and the two root files shown above are included in the GitHub upload. The `Data/` working directory is created locally after downloading the Zenodo files and is described in Section 4.
 
-### 2.1 Verified Version 2 inventory
+### 2.1 Released dataset and manuscript cohort
 
-Zenodo Version 2 contains four downloadable files:
+The associated [Zenodo record](https://zenodo.org/records/23634967) provides four downloadable files:
 
 - `Raw_Data.zip`
 - `Data_Process_Output.zip`
 - `Model_Output.zip`
 - `LFP_C_68_B_6_SOC_5-80_Part_1-1_ID_02HCB68111211Y88F0000101.xlsx`
 
-After extraction and placement of the additional 68 Ah LFP workbook, the expected data inventory is:
+The table reproduces the group statistics in manuscript Table 1 and adds the number of candidate cells in the released data. The real-capacity statistics, quantities, and data-sample counts describe the retained manuscript cohort. Some cells have multiple raw-workbook parts, so workbooks and cells must not be counted interchangeably.
 
-| Material | Raw workbooks | Step1 workbooks | Step2 workbooks | Step3 workbooks | Step4 workbooks |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 10Ah LMO | 62 | 62 | 62 | 10 | 10 |
-| 15Ah NMC | 83 | 83 | 83 | 10 | 10 |
-| 20Ah LFP | 102 | 102 | 102 | 10 | 10 |
-| 21Ah NMC | 99 | 52 | 52 | 10 | 10 |
-| 24Ah LMO | 72 | 64 | 64 | 10 | 10 |
-| 25Ah LMO | 96 | 96 | 96 | 10 | 10 |
-| 26Ah LMO | 132 | 98 | 98 | 10 | 10 |
-| 35Ah LFP | 57 | 56 | 56 | 10 | 10 |
-| 68Ah LFP | 96 | 96 | 96 | 10 | 10 |
-| **Total** | **799** | **709** | **709** | **90** | **90** |
+| Material | Real capacity (Ah) | Form factor | Usage | Candidate cells in release | Quantity in Table 1 | Data samples in Table 1 |
+| --- | --- | --- | --- | ---: | ---: | ---: |
+| NMC 811 | 15 (11.29; 12.39; 0.21) | Pouch | BEV1 | 83 | 83 | 114,000 |
+| NMC 622 | 21 (15.68; 20.97; 1.30) | Pouch | BEV2 | 52 | 33 | 58,100 |
+| LMO | 10 (5.68; 9.48; 1.10) | Pouch | HEV1 | 62 | 62 | 94,600 |
+| LMO | 24 (15.35; 19.83; 1.02) | Pouch | HEV2 | 64 | 56 | 81,000 |
+| LMO | 25 (10.66; 23.88; 3.13) | Pouch | HEV3 | 96 | 96 | 130,010 |
+| LMO | 26 (20.47; 25.98; 1.68) | Pouch | HEV4 | 98 | 89 | 147,100 |
+| LFP | 20 (13.33; 16.51; 0.79) | Prismatic | LSV1 | 102 | 102 | 138,500 |
+| LFP | 35 (26.03; 33.68; 1.70) | Prismatic | HBESS1 | 56 | 56 | 85,300 |
+| LFP | 68 (44.81; 59.36; 4.06) | Prismatic | GBESS1 | 96 | 96 | 136,500 |
+| **Total** | | | | **709** | **673** | **985,110** |
 
-The raw-workbook count includes multipart files, so it is not the battery count. Step1 and Step2 contain one workbook per released battery. `Data_Process_Output/` contains 1,599 files in total: 1,598 Excel workbooks and one JSON provenance summary. `Model_Output/` contains 12,103 files: 12,090 CSV files and 13 JSON files. The translation dictionary contains one CSV file and one JSON file. The complete arranged `Data/` directory therefore contains 14,503 files.
+Table 1 also reports a shared test design of `n_W = 10`, `n_SOC = 18`, and `n_P = 10`, with **98,511** total test points. Its `Quantity` column counts physical cells; `Data samples` is the separate count reported in Table 1.
+
+The release covers **709 candidate cells**: `Raw_Data.zip` contains 708, and the separately supplied 68 Ah LFP cell No. 6 workbook completes the raw inventory. The released processed outputs were generated from the 709-cell candidate set. To obtain the **673-cell manuscript cohort**, exclude 35 cells with `SOH > 1` in the released fixed-SOC data and one 21 Ah NMC cell whose historical random-SOC test has `SOH > 1`. Filtering the released fixed-SOC data alone would retain 674 cells; the documented additional exclusion is required for 673. See Sections 4.1 and 7.5 for the cell identity and the exact filtering command.
+
+The released raw data contain 799 workbooks, including multipart files. `Data_Process_Output/` contains 1,599 files: 1,598 Excel workbooks and one JSON provenance summary. `Model_Output/` contains 12,103 files: 12,090 CSV files and 13 JSON files. The translation dictionary contains one CSV file and one JSON file. The complete arranged `Data/` directory contains 14,503 files.
 
 The public GitHub upload contains 12 files: `README.md`, `requirements.txt`, eight Python files under `Data_Process_Codes/`, and two Python files under `Model_Codes/`.
 
@@ -102,7 +106,7 @@ This folder stores the working data used by the repository.
 - `Chinese_to_English_Dictionary/`: CSV and JSON reference dictionaries mapping original Chinese headers and terms to English. This folder is stored alongside `Raw_Data/` and is not a battery-type input folder.
 - `Raw_Data/`: raw Excel workbooks organized by battery type
 - `Data_Process_Output/`: outputs generated by Step1-Step4
-- `Model_Output/`: saved modeling outputs; Version 2 provides one complete six-case, 100-seed reference suite. Other experiment combinations can be reproduced by running the code.
+- `Model_Output/`: saved modeling outputs; the published release provides one complete six-case, 100-seed reference suite. Other experiment combinations can be reproduced by running the code.
 
 ### 3.2 `Data_Process_Codes/`
 
@@ -280,7 +284,7 @@ This README intentionally explains these folders at folder level only. The inter
 
 This folder stores model results generated by the code in `Model_Codes/`.
 
-Version 2 contains one complete six-case example suite:
+The published dataset contains one complete six-case example suite:
 
 - `20261025-141538__20Ah_LFP__W5000__SOC40__0.5C__six_feature_cases__seeds0-99/`
 
@@ -343,7 +347,7 @@ Inside a typical model-output folder:
 
 ## 4. Data Availability and Placement
 
-The code resolves relative paths from the repository root. Download the four Version 2 files from Zenodo, create `Data/` if necessary, and extract the three ZIP archives into `Data/`. The final layout must contain `Data/Raw_Data/`, `Data/Data_Process_Output/`, and `Data/Model_Output/` exactly once. If an extraction tool creates a duplicated path such as `Data/Data_Process_Output/Data_Process_Output/`, move the inner folder up one level.
+The code resolves relative paths from the repository root. Download the four files from the associated Zenodo record, create `Data/` if necessary, and extract the three ZIP archives into `Data/`. The final layout must contain `Data/Raw_Data/`, `Data/Data_Process_Output/`, and `Data/Model_Output/` exactly once. If an extraction tool creates a duplicated path such as `Data/Data_Process_Output/Data_Process_Output/`, move the inner folder up one level.
 
 The repository expects the working raw data to be placed under:
 
@@ -358,7 +362,7 @@ The processed outputs are generated under:
 - `Data/Data_Process_Output/Step3_ByPulse/`
 - `Data/Data_Process_Output/Step4_SelectedFeatures_with_R0_Reff/`
 
-`Step4_SelectedFeatures_with_R0_Reff/` is the complete Step4 dataset distributed in the current Zenodo version. It contains all modeling inputs retained from the former `Step4_SelectedFeatures/` release plus the R0 additions. The former directory is therefore not required and should not be placed beside the unified directory in a fresh installation.
+`Step4_SelectedFeatures_with_R0_Reff/` is the complete Step4 dataset distributed in the Zenodo release. It contains all modeling inputs retained from the former `Step4_SelectedFeatures/` release plus the R0 additions. The former directory is therefore not required and should not be placed beside the unified directory in a fresh installation.
 
 Place the separately downloaded 68 Ah LFP cell No. 6 raw workbook, ID `02HCB68111211Y88F0000101`, at:
 
@@ -392,29 +396,19 @@ The processing scripts were simplified into one script per step so that each fil
 
 ## 6. Computational Environment
 
-Two environments were used in this project.
-
-### 6.1 Data-processing environment
-
-The data-processing workflow was run locally in a Windows environment with PowerShell.
-
-Python version: `3.12.3`
-
-Main package versions:
+The HPC and local workflows use one documented Python environment for data processing and model benchmarking. Its Python and core package versions match Supplementary Note 3:
 
 ```text
-numpy==2.3.4
-pandas==2.3.3
-openpyxl==3.1.5
+Python 3.10.16
+numpy==1.25.1
+pandas==2.0.3
 scikit-learn==1.6.1
-matplotlib==3.10.7
+torch==2.1.2
 ```
 
-### 6.2 Manuscript model environment
+The code also uses `openpyxl` for Excel input/output and `matplotlib` for the optional SOH-exclusion report. Supplementary Note 3 does not specify their versions, so they are included in `requirements.txt` without version pins.
 
-The model code was run on an HPC system.
-
-The PyTorch environment was loaded with:
+On the original HPC system, the CUDA-enabled PyTorch build was loaded before activating the project virtual environment:
 
 ```bash
 module purge
@@ -422,28 +416,7 @@ module load PyTorch/2.1.2-foss-2023a-CUDA-12.1.1
 source /mimer/NOBACKUP/groups/naiss2025-22-468/bamm_venv_gpu/bin/activate
 ```
 
-Main package versions in the model environment:
-
-```text
-numpy==1.25.1
-pandas==2.0.3
-scikit-learn==1.6.1
-torch==2.1.2
-```
-
-### 6.3 Local validation environment
-
-The public workflow and the Version 2 example-output structure were revalidated locally with:
-
-```text
-Python 3.10.16
-numpy==2.0.1
-pandas==2.2.3
-scikit-learn==1.6.1
-torch==2.6.0+cu118
-```
-
-The root-level `requirements.txt` records the data-processing environment and the manuscript HPC model environment as two alternative sections. It is a version record rather than one combined installable environment. Do not install the entire file with a single `pip install -r requirements.txt` command because the two sections intentionally specify different NumPy and pandas versions.
+For local use, select Python 3.10.16 and install the packages listed in `requirements.txt`. The PyTorch package version is shared across HPC and local workflows; CUDA support depends on the platform-specific build.
 
 ## 7. Reproducibility Workflow
 
@@ -451,7 +424,7 @@ All relative input and output paths in the processing commands and model configu
 
 ### 7.1 Prepare the raw-data folder
 
-Download the four Version 2 files from the [Zenodo record](https://zenodo.org/records/23634967). Extract the three ZIP archives into `Data/`, place the separately downloaded 68 Ah LFP cell No. 6 workbook under `Data/Raw_Data/68Ah LFP/`, and confirm that the repository contains:
+Download the four files from the [Zenodo record](https://zenodo.org/records/23634967). Extract the three ZIP archives into `Data/`, place the separately downloaded 68 Ah LFP cell No. 6 workbook under `Data/Raw_Data/68Ah LFP/`, and confirm that the repository contains:
 
 - `Data/Chinese_to_English_Dictionary/`
 - `Data/Raw_Data/`
