@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Manuscript feature-comparison matrix runner.
 
@@ -27,9 +26,6 @@ DEFAULT_OUT_DIR = Path("Data/Model_Output")
 
 
 def main() -> None:
-    # -----------------------------
-    # Fixed experimental settings
-    # -----------------------------
     width_ms = 5000
     soc_list = [50, 40, 70]
 
@@ -44,18 +40,13 @@ def main() -> None:
         if list(material_dir.glob(f"*_W_{width_ms}.xlsx")):
             materials.append(material_dir.name)
 
-    # These are the six feature configurations reported in the manuscript.
-    # Keep this list synchronized with Model_backbone.PAPER_FEATURE_CASES.
     experiment_cases = list(bench.PAPER_FEATURE_CASES)
 
     # Each run uses one C-rate-specific input definition.
     crate_list = ["0.5C", "1C", "1.5C", "2C", "2.5C"]
 
-    # -----------------------------
-    # Global knobs
-    # -----------------------------
     MODELS = ["linear", "ridge", "lasso", "en", "svm", "rf", "gpr", "mlp", "transformer", "informer"]
-    SEEDS = list(range(100))  # For quick checks, reduce this list, for example list(range(5)).
+    SEEDS = list(range(100))
     TEST_SIZE = 0.2
     SHOW_PROGRESS = True
 

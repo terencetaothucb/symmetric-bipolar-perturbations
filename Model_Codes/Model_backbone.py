@@ -1,7 +1,4 @@
-# -*- coding: utf-8 -*-
 """
-Model_Benchmark_FaiIrrevReff_AllInOne.py
-
 Benchmark runner for PulseBat Step4 outputs.
 Manuscript feature groups are limited to:
 - fai_irrev
@@ -43,10 +40,6 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.svm import SVR
 
 
-# ============================================================
-# 0) Torch-backed models
-# ============================================================
-
 _TORCH_AVAILABLE = False
 try:
     import torch
@@ -70,10 +63,6 @@ except Exception:
 
     nn = _NNUnavailable()
 
-
-# ============================================================
-# 1) Feature groups + combos + builder
-# ============================================================
 
 FEATURE_GROUPS: Dict[str, List[str]] = {
     "fai_irrev": [
@@ -235,10 +224,6 @@ def feature_tag_from_spec(spec: Dict[str, Any]) -> str:
     return tag[:80]
 
 
-# ============================================================
-# 2) CONFIG (edit here only)
-# ============================================================
-
 CONFIG: Dict[str, Any] = dict(
     data_root="Data/Data_Process_Output/Step4_SelectedFeatures_with_R0_Reff",
 
@@ -284,10 +269,6 @@ CONFIG: Dict[str, Any] = dict(
     show_progress=True,
 )
 
-
-# ============================================================
-# 3) Utils / paths
-# ============================================================
 
 def script_dir() -> Path:
     return Path(__file__).resolve().parent
@@ -361,10 +342,6 @@ def ensure_raw_subdirs(raw_dir: Path, model: str) -> Tuple[Path, Path]:
     p_imp.mkdir(parents=True, exist_ok=True)
     return p_pred, p_imp
 
-
-# ============================================================
-# 4) Excel IO
-# ============================================================
 
 def find_xlsx(data_root: Path, material: str, width_ms: int) -> Path:
     material_dir = data_root / material
@@ -471,10 +448,6 @@ def load_xy(
     return Xdf, y, mapped_features, sheet, label_col
 
 
-# ============================================================
-# 5) Metrics + efficiency
-# ============================================================
-
 def metric_mae(y_true, y_pred) -> float:
     return float(np.mean(np.abs(y_true - y_pred)))
 
@@ -495,10 +468,6 @@ def summarize_metrics(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
         rows.append(r)
     return pd.DataFrame(rows).sort_values("model").reset_index(drop=True)
 
-
-# ============================================================
-# 6) Feature importance
-# ============================================================
 
 def native_importance(est, model_name: str, feature_names: List[str]) -> Optional[pd.DataFrame]:
     m = model_name.lower()
@@ -550,10 +519,6 @@ def summarize_featimp(all_seed_imp: List[pd.DataFrame], topk: Optional[int]) -> 
     return agg
 
 
-# ============================================================
-# 7) Torch deep models (Transformer / Informer-lite)
-# ============================================================
-
 def _resolve_torch_device(cfg: Dict[str, Any]) -> str:
     mode = str(cfg.get("torch_device", "auto")).lower()
     if mode == "cpu":
@@ -569,8 +534,6 @@ class _TabTransformerNet(nn.Module):
     """
     def __init__(self, n_features: int, d_model: int = 64, nhead: int = 4, num_layers: int = 3, dim_ff: int = 128, dropout: float = 0.1):
         super().__init__()
-        self.n_features = n_features
-        self.d_model = d_model
         self.value_proj = nn.Linear(1, d_model)
         self.pos_emb = nn.Parameter(torch.zeros(1, n_features, d_model))
         enc_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=dim_ff, dropout=dropout, batch_first=True)
@@ -600,8 +563,6 @@ class _InformerLiteNet(nn.Module):
     """
     def __init__(self, n_features: int, d_model: int = 64, nhead: int = 4, num_layers: int = 4, dim_ff: int = 256, dropout: float = 0.1):
         super().__init__()
-        self.n_features = n_features
-        self.d_model = d_model
         self.value_proj = nn.Linear(1, d_model)
         self.pos_emb = nn.Parameter(torch.zeros(1, n_features, d_model))
 
@@ -741,10 +702,6 @@ class TorchRegressor:
         return np.concatenate(outs, axis=0)
 
 
-# ============================================================
-# 8) Model builder
-# ============================================================
-
 def build_model(name: str, random_state: int, n_features: int, cfg: Dict[str, Any]):
     name = name.lower().strip()
 
@@ -805,10 +762,6 @@ def build_model(name: str, random_state: int, n_features: int, cfg: Dict[str, An
     raise ValueError(f"Unknown model: {name}")
 
 
-# ============================================================
-# 9) Progress / feature spec
-# ============================================================
-
 def prog(msg: str, enabled: bool = True) -> None:
     if enabled:
         print(msg, flush=True)
@@ -832,10 +785,6 @@ def feature_list_from_config(cfg: Dict[str, Any]) -> Tuple[List[str], Dict[str, 
     resolved["n_features_requested"] = len(feats)
     return feats, resolved
 
-
-# ============================================================
-# 10) Main run
-# ============================================================
 
 def run(cfg: Dict[str, Any]) -> Path:
     this_dir = script_dir()
@@ -934,7 +883,7 @@ def run(cfg: Dict[str, Any]) -> Path:
 
             # Standardize the feature matrix for models that benefit from scaling.
             need_scaler = standardize and (model_name in ["linear", "ridge", "lasso", "en", "elasticnet", "svm", "svr", "gpr", "mlp", "transformer", "informer"])
-            if need_scaler and model_name != "rf":
+            if need_scaler:
                 model = Pipeline([("scaler", StandardScaler()), ("est", base)])
             else:
                 model = base

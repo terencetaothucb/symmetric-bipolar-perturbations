@@ -58,7 +58,7 @@ def extract_soc_row_number_by_index(soc_index: int, pt_value: float) -> int:
 
 def write_u_features(record: List[object], raw_values, row_shift: int = 0) -> None:
     # The Step1 sheet stores alternating voltage columns around each pulse event.
-    # U1 takes the first voltage point, then even/odd indexes switch columns.
+    # Odd and even voltage indexes use different source columns.
     for u_num in DEFAULT_U_INDEXES:
         u_index = DEFAULT_U_INDEXES.index(u_num) + 1
         row_num = record[-1] + (u_num // 2) + row_shift
@@ -67,9 +67,7 @@ def write_u_features(record: List[object], raw_values, row_shift: int = 0) -> No
 
         u_target = 9 + u_index
 
-        if u_num == 1:
-            record[u_target] = raw_values[row_num][12]
-        elif u_num % 2 == 0:
+        if u_num % 2 == 0:
             record[u_target] = raw_values[row_num][10]
         else:
             record[u_target] = raw_values[row_num][12]
